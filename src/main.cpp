@@ -218,33 +218,32 @@ void wifi_sniffer_packet_handler(void *buff, wifi_promiscuous_pkt_type_t type)
 		// - 0x00 : SSID
 		// - 0x03 : DS Parameter Set
 		// - 0xdd : Vendor Specific / OUI=0050f2(Microsoft)
-		if (id == 0xdd)
-		{
-			// VendorSpecfic
-			//      printf("(%02x:%02x:%02x)", ipkt->payload[p], ipkt->payload[p+1], ipkt->payload[p+2]);
-			if (ipkt->payload[p] == 0x00 && ipkt->payload[p + 1] == 0x50 && ipkt->payload[p + 2] == 0xf2)
-				; //  skip OUI=Microsoft -> skip
-			else
-			{
-				// use other OUI
-				buf[pb++] = id;
-				buf[pb++] = len;
-				for (uint8_t i = 0; i < len; i++)
-					buf[pb++] = ipkt->payload[p + i];
-			}
-		}
-		else if (id == 0xff && len == 3)
-			; // skip ExtTag's FLIS Request Parameters
-		else if (id != 0x00 && id != 0x03)
-		{
-			buf[pb++] = id;
-			buf[pb++] = len;
-			for (uint8_t i = 0; i < len; i++)
-				buf[pb++] = ipkt->payload[p + i];
-		}
-		p += len;
-	}
-	Nbuf = pb;
+		// - 0x2d : ExtTag's FLIS Request Parameters (len=3)
+		// - 0x7f : Extended Capabilities (len=8 or 16)
+		if (id == 0xdd){
+      // VendorSpecfic
+      //      printf("(%02x:%02x:%02x)", ipkt->payload[p], ipkt->payload[p+1], ipkt->payload[p+2]);
+      if (ipkt->payload[p] == 0x00  && ipkt->payload[p+1] == 0x50 && ipkt->payload[p+2] == 0xf2)
+      ; //  skip OUI=Microsoft -> skip
+      else{
+        // use other OUI
+        buf[pb++] = id;
+        buf[pb++] = len;
+        for (uint8_t i = 0; i < len; i++) buf[pb++] = ipkt->payload[p + i];
+      }
+    }
+    else if (id == 0xff && len == 3)
+    ; // skip ExtTag's FLIS Request Parameters
+		else if (id == 0x2d || id == 0x7f)
+		; // skip ExtTag's FLIS Request Parameters and Extended Capabilities
+    else if (id != 0x00 && id != 0x03){
+      buf[pb++] = id;
+      buf[pb++] = len;
+      for (uint8_t i = 0; i < len; i++) buf[pb++] = ipkt->payload[p + i];
+    }
+    p += len;
+  }
+  Nbuf = pb;
 
 	byte shaResult[32];
 	mbedtls_md_context_t ctx;
@@ -485,7 +484,7 @@ void setup()
 	}
 	printf("WiFi settings from wifi.txt: [%s] / [%s] / [%s]\n", ssid, ssid_pwd, ssid_pwd2);
 	logFile.close();
-
+/*
 	// read WiFi config
 	if (!SD.exists("/wifi.txt"))
 		ShowAlert(LED_WIFIERROR, 1000);
@@ -522,7 +521,7 @@ void setup()
 	}
 	printf("WiFi settings from wifi.txt: [%s] / [%s] / [%s]\n", ssid, ssid_pwd, ssid_pwd2);
 	logFile.close();
-
+*/
 	M5.update();
 	if (M5.BtnA.isPressed())
 	{
