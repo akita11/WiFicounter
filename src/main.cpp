@@ -82,8 +82,8 @@ uint8_t pLineBuf_r = 0, pLineBuf_w = 0;
 char ssid[64];
 char ssid_pwd[64];
 char ssid_pwd2[64];
-// bool fOperation = true; // logging at boot
-bool fOperation = false; // logging at boot
+bool fOperation = true; // logging at boot
+//bool fOperation = false; // logging at boot
 #define NTP_TIMEZONE "JST-9"
 
 #define PIN_BUTTON 0	// 本体ボタンの使用端子（G0）
@@ -458,6 +458,8 @@ void setup()
 		logFile.close();
 	}
 
+	//for (uint8_t i = 0; i < 3; i++){ printf("!\n"); delay(1000); } // wait at boot for Serial messages
+
 	// read WiFi config
 	if (!SD.exists("/wifi.txt")) ShowAlert(LED_WIFIERROR, 200);
 	logFile = SD.open("/wifi.txt", "r");
@@ -467,7 +469,7 @@ void setup()
 	while (logFile.available() && tp < 3)
 	{
 		char c = (char)logFile.read();
-		if (p >= 0 && (c == 0x0d || c == 0x0a))
+		if (p > 0 && (c == 0x0d || c == 0x0a))
 		{
 			if (tp == 0) ssid[p] = '\0';
 			else if (tp == 1) ssid_pwd[p] = '\0';
@@ -484,44 +486,6 @@ void setup()
 	}
 	printf("WiFi settings from wifi.txt: [%s] / [%s] / [%s]\n", ssid, ssid_pwd, ssid_pwd2);
 	logFile.close();
-/*
-	// read WiFi config
-	if (!SD.exists("/wifi.txt"))
-		ShowAlert(LED_WIFIERROR, 1000);
-	logFile = SD.open("/wifi.txt", "r");
-	uint8_t fin = 0;
-	uint8_t p = 0, tp = 0;
-	while (fin == 0)
-	{
-		ssid_pwd2[0] = '\0';
-		while (logFile.available() && tp < 3)
-		{
-			char c = (char)logFile.read();
-			if (p > 0 && (c == 0x0d || c == 0x0a))
-			{
-				if (tp == 0)
-					ssid[p] = '\0';
-				else if (tp == 1)
-					ssid_pwd[p] = '\0';
-				else
-					ssid_pwd2[p] = '\0';
-				tp++;
-				p = 0;
-			}
-			if (c != 0x0d && c != 0x0a)
-			{
-				if (tp == 0)
-					ssid[p++] = c;
-				else if (tp == 1)
-					ssid_pwd[p++] = c;
-				else
-					ssid_pwd2[p++] = c;
-			}
-		}
-	}
-	printf("WiFi settings from wifi.txt: [%s] / [%s] / [%s]\n", ssid, ssid_pwd, ssid_pwd2);
-	logFile.close();
-*/
 	M5.update();
 	if (M5.BtnA.isPressed())
 	{
@@ -551,6 +515,7 @@ void setup()
 
 	period = DEFAULT_PERIOD;
 	if (SD.exists("/period.txt")){
+		printf("reading period.txt\n");
 		logFile = SD.open("/period.txt", "r");
 		fin = false;
 		char line[32];
