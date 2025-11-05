@@ -275,13 +275,12 @@ void wifi_sniffer_packet_handler(void *buff, wifi_promiscuous_pkt_type_t type)
 
 bool connectWiFi()
 {
-	//		WiFi.disconnect(true);  //disconnect form wifi to set new wifi connection
 	WiFi.disconnect();
 	delay(500);
 	WiFi.mode(WIFI_STA); // init wifi mode
 	if (strlen(ssid_pwd2) > 1)
 	{
-		printf("Connecting to %s / %s\n", ssid, ssid_pwd);
+		printf("Connecting to %s / %s / %s\n", ssid, ssid_pwd, ssid_pwd2);
 		WiFi.begin(ssid, WPA2_AUTH_PEAP, "", ssid_pwd, ssid_pwd2);
 	}
 	else
@@ -322,12 +321,13 @@ void NTPadjust()
 	//  delay(3000);
 
 	connectWiFi();
+	printf("adjusting clock...\n");
 	configTzTime(NTP_TIMEZONE, "ntp.nict.jp");
 
 #if SNTP_ENABLED
 	while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED)
 	{
-		Serial.print('.');
+		printf(".");
 		delay(1000);
 	}
 #else
@@ -355,6 +355,7 @@ uint32_t t0, t1;
 
 void setOperationLED()
 {
+	printf("setOperationLED: %d\n", fOperation);
 	if (fOperation == true)
 		showLED(LED_LOGGING);
 	else
@@ -534,6 +535,7 @@ void setup()
 	printf("upload period = %d [msec]\n", period);
 
 	setOperationLED();
+	printf("done\n");
 	t0 = millis();
 	wifi_sniffer_init();
 }
