@@ -577,12 +577,15 @@ void loop()
 			t0 = millis();
 			setOperationLED();
 		}
+		/*
+		// flash LED when data received
 		if (fReceived == 1)
 		{
 			showLED(LED_RECEIVED);
 			setOperationLED();
 			fReceived = 0;
 		}
+		*/
 	}
 	delay(1);
 }
