@@ -35,6 +35,7 @@ uint16_t pList = 0;
 #define LIST_SIZE 1024 // maximum number of ID in COUNT_TERM
 byte list[LIST_SIZE][32];
 uint16_t count[LIST_SIZE];
+volatile uint8_t fSnifferEnabled = 1;  // プローブリクエスト受信有効フラグ（割り込み競合回避）
 
 uint8_t compare_item(byte *a, byte *b)
 { // return 1 if a == b
@@ -193,6 +194,11 @@ const char *wifi_sniffer_packet_type2str(wifi_promiscuous_pkt_type_t type)
 
 void wifi_sniffer_packet_handler(void *buff, wifi_promiscuous_pkt_type_t type)
 {
+	// プローブリクエスト受信が無効な場合はスキップ（POST実行中のメモリ競合回避）
+	if (!fSnifferEnabled) {
+		return;
+	}
+	
 	const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *)buff;
 	const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *)ppkt->payload;
 	const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
@@ -223,7 +229,7 @@ void wifi_sniffer_packet_handler(void *buff, wifi_promiscuous_pkt_type_t type)
 		if (id == 0xdd){
       // VendorSpecfic
       //      printf("(%02x:%02x:%02x)", ipkt->payload[p], ipkt->payload[p+1], ipkt->payload[p+2]);
-      if (ipkt->payload[p] == 0x00  && ipkt->payload[p+1] == 0x50 && ipkt->payload[p+2] == 0xf2)
+      if (len >= 3 && ipkt->payload[p] == 0x00  && ipkt->payload[p+1] == 0x50 && ipkt->payload[p+2] == 0xf2)
       ; //  skip OUI=Microsoft -> skip
       else{
         // use other OUI
@@ -364,10 +370,10 @@ void setOperationLED()
 
 bool postData(int num)
 {
-	bool res;
+	bool res = false;
 	if (connectWiFi() == false){
 		printf("failed to connect to %s\n", ssid);
-		return(false);
+		return false;
 	}
 
 	showLED(LED_SENDING);
@@ -376,40 +382,63 @@ bool postData(int num)
 
 	auto dt = M5.Rtc.getDateTime();
 	printf("%02d%02d%02d %02d%02d%02d ", dt.date.year % 100, dt.date.month, dt.date.date, dt.time.hours, dt.time.minutes, dt.time.seconds);
-	char datetime[80];
-	sprintf(datetime, "%d,%d,%d,%d%,%d,%d", dt.date.year, dt.date.month, dt.date.date, dt.time.hours, dt.time.minutes, dt.time.seconds);
-
-	HTTPClient https;
-	printf("Connecting to server...");
-	if (https.begin(serverUrl))
+	
+	// char配列でローカルスタック上に確保（String クラスのメモリ再配置回避）
+	char datetime[32];
+	snprintf(datetime, sizeof(datetime), "%d,%d,%d,%d,%d,%d", dt.date.year, dt.date.month, dt.date.date, dt.time.hours, dt.time.minutes, dt.time.seconds);
+	
+	char postDataStr[512];
+	snprintf(postDataStr, sizeof(postDataStr), "{\"mac\":\"%s\",\"time\":\"%s\",\"count\":\"%d\"}", mac_str, datetime, num);
+	printf("postData : %s\n", postDataStr);
+	
+	// HTTPClient オブジェクトをスコープ内で明示的に管理
 	{
-		https.addHeader("Content-Type", "application/json");
-//		String postData = "{\"mac\":\"" + String(mac_str) + "\",\"count\":\"" + String(num) + "\"}";
-		String postData = "{\"mac\":\"" + String(mac_str) + "\",\"time\":\"" + String(datetime) + "\",\"count\":\"" + String(num) + "\"}";
-		printf("postData : %s\n", postData.c_str());
-		int httpResponseCode = https.POST(postData);
-		if (httpResponseCode > 0)
+		// POST実行中のプローブリクエスト受信割り込みを一時無効化（メモリ競合回避）
+		fSnifferEnabled = 0;
+		
+		HTTPClient https;
+		printf("Connecting to server...");
+		if (https.begin(serverUrl))
 		{
-			printf("HTTP Response code: %d / %s\n", httpResponseCode, https.getString().c_str());
-			if (httpResponseCode == 200) res = true;
-			else res = false;
+			https.addHeader("Content-Type", "application/json");
+			
+			int httpResponseCode = https.POST(postDataStr);
+			if (httpResponseCode > 0)
+			{
+				printf("HTTP Response code: %d\n", httpResponseCode);
+				if (httpResponseCode == 200) {
+					res = true;
+					String response = https.getString();
+					if (response.length() > 0) {
+						printf("Response: %s\n", response.c_str());
+					}
+				} else {
+					res = false;
+				}
+			}
+			else
+			{
+				printf("Error on HTTP request: %d\n", httpResponseCode);
+				res = false;
+			}
+			https.end();
 		}
 		else
 		{
-			printf("Error on HTTP request: %s\n", httpResponseCode);
+			printf("Unable to connect to server.\n");
 			res = false;
 		}
-		https.end();
 	}
-	else
-	{
-		printf("Unable to connect to server.\n");
-		res = false;
-	}
+	
+	// POST完了後、プローブリクエスト受信割り込みを再度有効化
+	fSnifferEnabled = 1;
+	
+	delay(100);  // HTTPClient 終了後、メモリ安定化のための遅延
 	printf("disconnecting WiFi...");
-	WiFi.disconnect();
+	WiFi.disconnect(true);  // true でディープスリープまで管理
+	delay(100);
 	showLED(LED_NONE);
-	return(res);
+	return res;
 }
 
 void setup()
