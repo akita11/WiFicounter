@@ -83,8 +83,8 @@ uint8_t pLineBuf_r = 0, pLineBuf_w = 0;
 char ssid[64];
 char ssid_pwd[64];
 char ssid_pwd2[64];
-bool fOperation = true; // logging at boot
-//bool fOperation = false; // logging at boot
+#define OPERATION_AT_BOOT true
+bool fOperation = OPERATION_AT_BOOT; // logging at boot
 #define NTP_TIMEZONE "JST-9"
 
 #define PIN_BUTTON 0	// 本体ボタンの使用端子（G0）
@@ -437,6 +437,11 @@ bool postData(int num)
 	printf("disconnecting WiFi...");
 	WiFi.disconnect(true);  // true でディープスリープまで管理
 	delay(100);
+	
+	// WiFi切断後、プロミスキャスモードを再起動
+	printf("reinitializing WiFi sniffer...");
+	wifi_sniffer_init();
+	
 	showLED(LED_NONE);
 	return res;
 }
@@ -563,9 +568,10 @@ void setup()
 	}
 	printf("upload period = %d [msec]\n", period);
 
-	setOperationLED();
 	printf("done\n");
 	t0 = millis();
+	fOperation = OPERATION_AT_BOOT;
+	setOperationLED();
 	wifi_sniffer_init();
 }
 
@@ -598,13 +604,19 @@ void loop()
 					for (uint8_t j = 0; j < 32; j++)
 						printf("%02x", list[i][j]);
 					printf("\n");
-					count[i] = 0;
 				}
 			}
 			bool res = postData(pList); // res=false if error occurs
 			// ToDo: retry on error
 
+			// リスト全体をリセット
 			pList = 0;
+			for (uint16_t i = 0; i < LIST_SIZE; i++)
+			{
+				count[i] = 0;
+				for (uint8_t j = 0; j < 32; j++)
+					list[i][j] = 0;
+			}
 			t0 = millis();
 			setOperationLED();
 		}
